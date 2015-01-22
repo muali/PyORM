@@ -40,9 +40,13 @@ class MySQLEngine(object):
 
     def do_queries(self, queries_options):
         connection = self.connection_pool.get_connection()
-        for query_options in queries_options:
-            self.do_query(query_options, connection)
-        connection.commit()
+        try:
+            for query_options in queries_options:
+                self.do_query(query_options, connection)
+            connection.commit()
+        except:
+            connection.rollback()
+            raise
         connection.close()
 
     @staticmethod
