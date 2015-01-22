@@ -6,6 +6,15 @@ import inspect
 
 
 class Singleton(type):
+    instance = None
+
+    def __call__(cls, *args, **kwargs):
+        if cls.instance is None:
+            cls.instance = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls.instance
+
+
+class ExtendedSingleton(type):
     instance_map = {}
 
     def __call__(cls, *args, **kwargs):
@@ -37,6 +46,6 @@ class Singleton(type):
 
         arg_tuple = tuple(sorted(arg_map.items()))
         if arg_tuple not in cls.instance_map:
-            cls.instance_map[arg_tuple] = super(Singleton, cls).__call__(*args, **kwargs)
+            cls.instance_map[arg_tuple] = super(ExtendedSingleton, cls).__call__(*args, **kwargs)
 
         return cls.instance_map[arg_tuple]
