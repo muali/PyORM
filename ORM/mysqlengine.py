@@ -14,7 +14,7 @@ def build_condition(condition_options):
             is_first = False
         else:
             condition += " and "
-        condition += ("%s == %s", key, str(condition_options[key]))
+        condition += "%s == %s" % (key, str(condition_options[key]))
     return condition
 
 
@@ -114,7 +114,7 @@ class MySQLEngine(object):
         cursor.close()
         cursor = connection.cursor(dictionary=True)
         for table in tables:
-            cursor.execute("desc %s", table)
+            cursor.execute("desc %s" % table)
             for column in cursor:
                 table.add_column(column)
         return tables
@@ -179,7 +179,7 @@ class MySQLEngine(object):
                     is_first = False
                 else:
                     query += ','
-                query += ("%s = %s", key, str(query_options.data))
+                query += "%s = %s" % (key, str(query_options.data))
             query += '\n' + build_condition(query_options.condition)
         cursor = connection.cursor()
         cursor.execute(query)
