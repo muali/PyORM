@@ -14,7 +14,7 @@ def build_condition(condition_options):
             is_first = False
         else:
             condition += " and "
-        condition += "%s == %s" % (key, str(condition_options[key]))
+        condition += "%s == %%(%s)s" % (key, key)
     return condition
 
 
@@ -128,10 +128,10 @@ class MySQLEngine(object):
 
     def get_object(self, query_options):
         connection = self.connection_pool.get_connection()
-        query = ("select * from %s\n", query_options.entity)
+        query = "select * from %s\n" % query_options.entity
         query += build_condition(query_options.condition)
         cursor = connection.cursor(dictionary=True)
-        cursor.execute(query)
+        cursor.execute(query, query_options.condition)
         result = cursor.fetchone()
         cursor.close()
         connection.close()
@@ -155,8 +155,9 @@ class MySQLEngine(object):
     @staticmethod
     def do_query(query_options, connection):
         query = ""
+        cursor = connection.cursor()
         if query_options.type == "insert":
-            query += ("insert into %s\n", query_options.entity)
+            query += "insert into %s\n" % query_options.entity
             fields = "("
             values = "values ("
             is_first = True
@@ -167,20 +168,23 @@ class MySQLEngine(object):
                     fields += ','
                     values += ','
                 fields += key
-                values += str(query_options.data[key])
+                values += "%%(%s)s" % key
             query += fields + ")\n" + values + ')'
+            cursor.execute(query, query_options.data)
 
         if query_options.type == "update":
             query += ("update %s\n", query_options.entity)
             query += "set "
             is_first = True
+            data = {}
             for key in query_options.data:
                 if is_first:
                     is_first = False
                 else:
                     query += ','
-                query += "%s = %s" % (key, str(query_options.data))
+                query += "%s = %%(%s)s" % (key, "__" + key)
+                data["__" + key] = query_options.data[key]
             query += '\n' + build_condition(query_options.condition)
-        cursor = connection.cursor()
-        cursor.execute(query)
+            cursor.execute(query, data, query_options.condition)
+
         cursor.close()
