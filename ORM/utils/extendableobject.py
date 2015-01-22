@@ -8,9 +8,9 @@ class ExtendableObject(object):
         return self.__dict__[item]
 
     def __setattr__(self, key, value):
-        if key not in self.__dict__:
-            raise AttributeError("'%s' object has no attribute %s" % (self.__name__, key))
         self.__dict__[key] = value
 
     def __delattr__(self, item):
+        if key not in self.__dict__:
+            raise AttributeError("'%s' object has no attribute %s" % (self.__name__, key))
         del self.__dict__[item]

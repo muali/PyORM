@@ -5,7 +5,7 @@ __author__ = 'Moskvitin Maxim'
 import mysql.connector
 from ORM.utils.singleton import ExtendedSingleton
 from ORM.utils.extendableobject import ExtendableObject
-
+import ORM
 
 class InvalidModificationException(Exception):
     pass
@@ -19,7 +19,7 @@ def build_condition(condition_options):
             is_first = False
         else:
             condition += " and "
-        condition += "%s == %%(%s)s" % (key, key)
+        condition += "%s = %%(%s)s" % (key, key)
     return condition
 
 
@@ -29,7 +29,7 @@ class Table:
         self.columns = []
 
     def add_column(self, column):
-        self.columns += column
+        self.columns.append(column)
 
 
 class MySQLBase(ExtendableObject, metaclass=ExtendedSingleton):
@@ -46,10 +46,10 @@ class MySQLBase(ExtendableObject, metaclass=ExtendedSingleton):
                   % (len(self._primary_keys), len(kwargs)))
 
         query_options = ExtendableObject()
-        query_options.entity = self.__name__
+        query_options.entity = type(self).__name__
         query_options.condition = kwargs
 
-        for key, value in kwargs:
+        for key in kwargs:
             if key not in self._primary_keys:
                 raise TypeError("Unexpected arg: %s" % key)
 
@@ -64,8 +64,8 @@ class MySQLBase(ExtendableObject, metaclass=ExtendedSingleton):
             delattr(query_options, "condition")
             engine.queries_options += query_options
         else:
-            for key, value in data:
-                ExtendableObject.__setattr__(self, key, value)
+            for key in data:
+                ExtendableObject.__setattr__(self, key, data[key])
 
         self.keep_state_as_valid()
 
@@ -119,7 +119,7 @@ class MySQLEngine(object):
         for table in tables:
             newclass = self.create_class(table)
             newclass.__init__ = init_decorator(newclass.__init__)
-            globals()[newclass.__name__] = newclass
+            setattr(ORM, newclass.__name__, newclass)
 
     def get_db_schema(self):
         connection = self.connection_pool.get_connection()
@@ -127,20 +127,20 @@ class MySQLEngine(object):
         cursor.execute("show tables")
         tables = []
         for (name,) in cursor:
-            tables += Table(name)
+            tables.append(Table(name))
         cursor.close()
         cursor = connection.cursor(dictionary=True)
         for table in tables:
-            cursor.execute("desc %s" % table)
+            cursor.execute("desc %s" % table.name)
             for column in cursor:
                 table.add_column(column)
         return tables
 
     @staticmethod
     def create_class(table):
-        return type(table.name, MySQLBase, {
-            "_primary_keys": [column.Field for column in table.columns if column.Key == "PRI"],
-            "_fields": [column.Field for column in table.columns]
+        return type(table.name, (MySQLBase, ), {
+            "_primary_keys": [column["Field"] for column in table.columns if column["Key"] == "PRI"],
+            "_fields": [column["Field"] for column in table.columns]
         })
 
     def get_object(self, query_options):
@@ -206,8 +206,8 @@ class MySQLEngine(object):
                     is_first = False
                 else:
                     query += ','
-                query += "%s = %%(%s)s" % (key, "__" + key)
-                data["__" + key] = query_options.data[key]
+                query += "%s = %%(%s)s" % (key, "-" + key)
+                data["-" + key] = query_options.data[key]
             query += '\n' + build_condition(query_options.condition)
             cursor.execute(query, data, query_options.condition)
 
