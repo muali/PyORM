@@ -19,25 +19,34 @@ def build_condition(condition_options):
 
 class MySQLEngine(object):
     def __init__(self, connection_options):
-        connection_options.autocommit = True
-        self.connection = mysql.connector.connect(**connection_options)
+        self.connection_pool = mysql.connector.pooling.MySQLConnectionPool(**connection_options)
 
     def load_classes(self):
         pass
 
-    def do_query(self, query_options):
-        if query_options.type == "select":
-            query = ("select * from %s\n", query_options.entity)
-            query += build_condition(query_options.condition)
-            cursor = self.connection.cursor(dictionary=True)
-            cursor.execute(query)
-            result = None
-            for row in cursor:
-                result = row
-                break
-            cursor.close()
-            return result
+    def do_select(self, query_options):
+        connection = self.connection_pool.get_connection()
+        query = ("select * from %s\n", query_options.entity)
+        query += build_condition(query_options.condition)
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(query)
+        result = None
+        for row in cursor:
+            result = row
+            break
+        cursor.close()
+        connection.close()
+        return result
 
+    def do_queries(self, queries_options):
+        connection = self.connection_pool.get_connection()
+        for query_options in queries_options:
+            self.do_query(query_options, connection)
+        connection.commit()
+        connection.close()
+
+    @staticmethod
+    def do_query(query_options, connection):
         if query_options.type == "insert":
             query = ("insert into %s\n", query_options.entity)
             fields = "("
@@ -52,7 +61,7 @@ class MySQLEngine(object):
                 fields += key
                 values += str(query_options.data[key])
             query += fields + ")\n" + values + ')'
-            cursor = self.connection.cursor()
+            cursor = connection.cursor()
             cursor.execute(query)
 
         if query_options.type == "update":
@@ -66,7 +75,7 @@ class MySQLEngine(object):
                     query += ','
                 query += ("%s = %s", key, str(query_options.data))
             query += '\n' + build_condition(query_options.condition)
-            cursor = self.connection.cursor()
+            cursor = connection.cursor()
             cursor.execute(query)
 
 
