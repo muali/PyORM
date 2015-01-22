@@ -4,6 +4,11 @@ __author__ = 'Moskvitin Maxim'
 
 import mysql.connector
 from ORM.utils.singleton import ExtendedSingleton
+from ORM.utils.extendableobject import ExtendableObject
+
+
+class InvalidModificationException(Exception):
+    pass
 
 
 def build_condition(condition_options):
@@ -27,10 +32,11 @@ class Table:
         self.columns += column
 
 
-class MySQLBase(object, metaclass=ExtendedSingleton):
+class MySQLBase(ExtendableObject, metaclass=ExtendedSingleton):
     _primary_keys = []
     _fields = []
     last_valid_state = {}
+    is_valid = True
 
     def __init__(self, engine, **kwargs):
         self.engine = engine
@@ -39,7 +45,7 @@ class MySQLBase(object, metaclass=ExtendedSingleton):
             raise TypeError("Expected: %d arguments, but recieved %d"
                   % (len(self._primary_keys), len(kwargs)))
 
-        query_options = object()
+        query_options = ExtendableObject()
         query_options.entity = self.__name__
         query_options.condition = kwargs
 
@@ -50,19 +56,18 @@ class MySQLBase(object, metaclass=ExtendedSingleton):
         data = engine.get_object(query_options)
         if data is None:
             for field in self._fields:
-                object.__setattr__(self, field)
+                ExtendableObject.__setattr__(self, field)
             for key, value in kwargs:
-                object.__setattr__(self, key, value)
+                ExtendableObject.__setattr__(self, key, value)
             query_options.data = kwargs
             query_options.type = "insert"
             delattr(query_options, "condition")
             engine.queries_options += query_options
         else:
             for key, value in data:
-                object.__setattr__(self, key, value)
+                ExtendableObject.__setattr__(self, key, value)
 
-        for field in self._fields:
-            self.last_valid_state[field] = getattr(self, field)
+        self.keep_state_as_valid()
 
     def get_condition(self):
         condition = {}
@@ -72,23 +77,35 @@ class MySQLBase(object, metaclass=ExtendedSingleton):
 
     def __setattr__(self, key, value):
         if key in self._primary_keys:
-            raise Exception()
-            #TODO
+            raise InvalidModificationException("Altering %s, which is id of object of %s class" %
+                                               (key, self.__name__))
         if key in self._fields:
             query_options = object()
             query_options.type = "update"
             query_options.entity = self.__name__
             query_options.condition = self.get_condition()
             self.engine.queries_options += query_options
-        object.__setattr__(self, key, value)
+            self.engine.altered_objects += self
+        ExtendableObject.__setattr__(self, key, value)
 
     def __getattr__(self, item):
-        #TODO validate
-        object.__getattr__(self, item)
+        if not self.is_valid:
+            self.validate()
+        ExtendableObject.__getattr__(self, item)
+
+    def validate(self):
+        for key, value in self.last_valid_state:
+            ExtendableObject.__setattr__(self, key, value)
+        self.is_valid = True
+
+    def keep_state_as_valid(self):
+        for field in self._fields:
+            self.last_valid_state[field] = getattr(self, field)
 
 
 class MySQLEngine(object):
     queries_options = []
+    altered_objects = []
 
     def __init__(self, connection_options):
         self.connection_pool = mysql.connector.pooling.MySQLConnectionPool(**connection_options)
@@ -150,7 +167,14 @@ class MySQLEngine(object):
             connection.close()
         except:
             self.queries_options = []
+            for obj in self.altered_objects:
+                obj.is_valid = False
+            self.altered_objects = []
             raise
+        self.queries_options = []
+        for obj in self.altered_objects:
+            obj.keep_state_as_valid()
+        self.altered_objects = []
 
     @staticmethod
     def do_query(query_options, connection):
