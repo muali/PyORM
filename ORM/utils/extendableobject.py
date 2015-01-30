@@ -11,6 +11,6 @@ class ExtendableObject(object):
         self.__dict__[key] = value
 
     def __delattr__(self, item):
-        if key not in self.__dict__:
+        if item not in self.__dict__:
             raise AttributeError("'%s' object has no attribute %s" % (self.__name__, key))
         del self.__dict__[item]
