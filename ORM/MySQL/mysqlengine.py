@@ -3,14 +3,8 @@
 __author__ = 'Moskvitin Maxim'
 
 import mysql.connector
-from ORM.utils.singleton import ExtendedSingleton
-from ORM.utils.extendableobject import ExtendableObject
 import ORM
-
-
-class InvalidModificationException(Exception):
-    pass
-
+from ORM.MySQL.mysqlbase import *
 
 def build_condition(condition_options):
     condition = "where "
@@ -38,6 +32,7 @@ class MySQLEngine(object):
 
     def __init__(self, **connection_options):
         self.connection_pool = mysql.connector.pooling.MySQLConnectionPool(**connection_options)
+        self.load_classes()
 
     def load_classes(self):
         def init_decorator(init):
@@ -47,8 +42,8 @@ class MySQLEngine(object):
         tables = self.get_db_schema()
         for table in tables:
             new_class = self.create_class(table)
-            new_class.__init__ = init_decorator(newclass.__init__)
-            setattr(ORM, new_class.__name__, newclass)
+            new_class.__init__ = init_decorator(new_class.__init__)
+            setattr(ORM, new_class.__name__, new_class)
 
     def get_db_schema(self):
         connection = self.connection_pool.get_connection()
@@ -68,8 +63,8 @@ class MySQLEngine(object):
     @staticmethod
     def create_class(table):
         return type(table.name, (MySQLBase, ), {
-            "_primary_keys": [column["Field"] for column in table.columns if column["Key"] == "PRI"],
-            "_fields": [column["Field"] for column in table.columns]
+            "primary_keys": [column["Field"] for column in table.columns if column["Key"] == "PRI"],
+            "fields": [column["Field"] for column in table.columns]
         })
 
     def get_object(self, query_options):
@@ -107,7 +102,7 @@ class MySQLEngine(object):
     @staticmethod
     def do_query(query_options, cursor):
         query = ""
-        if query_options.type == "Insert":
+        if query_options.method == "Insert":
             query += "insert into %s\n" % query_options.entity
             fields = "("
             values = "values ("

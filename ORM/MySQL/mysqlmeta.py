@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 __author__ = 'Moskvitin Maxim'
 
-import inspect
+from ORM.exceptions import *
 
 """
     Metaclass for MySQL entity class
@@ -15,18 +15,16 @@ class MySQLMeta(type):
     primary_keys = []
 
     def __call__(cls, *args, **kwargs):
-        pk_tuple = cls.build_pk_tuple(**kwargs)
-        if pk_tuple not in cls.instance_map or is_new_instance:
-            cls.instance_map[pk_tuple] = super(MySQLMeta, cls).__call__(*args, **kwargs)
-        return cls.instance_map[pk_tuple]
-
-    def build_pk_tuple(cls, **kwargs):
-        pk_dict = {}
         is_new_instance = False
+        pk_dict = {}
         for key, value in kwargs.items():
             if key in cls.primary_keys:
                 pk_dict[key] = value
             else:
                 is_new_instance = True
-        pk_tuple = tuple(sorted(pk_dict.items()))
-        return pk_tuple
+        pk_tuple = (cls.__name__, ) + tuple(sorted(pk_dict.items()))
+        if pk_tuple in cls.instance_map and is_new_instance:
+            raise DatabaseException("Object exists")
+        if pk_tuple not in cls.instance_map:
+            cls.instance_map[pk_tuple] = super(MySQLMeta, cls).__call__(*args, **kwargs)
+        return cls.instance_map[pk_tuple]

@@ -4,9 +4,10 @@ __author__ = 'Moskvitin Maxim'
 
 from ORM.MySQL.mysqlmeta import *
 from ORM.utils.extendableobject import *
+from ORM.exceptions import *
 
 
-class MySQLBase(ExtendableObject, metaclass=MySQLMeta):
+class MySQLBase(metaclass=MySQLMeta):
     fields = []
     last_valid_state = {}
     is_valid = True
@@ -41,28 +42,22 @@ class MySQLBase(ExtendableObject, metaclass=MySQLMeta):
                 is_new_object = False
                 self.commit_method = "Update"
                 for key, value in data.items():
-                    ExtendableObject.__setattr__(self, key, value)
+                    super().__setattr__(key, value)
                 self.keep_state_as_valid()
 
         if is_new_object:
-            object_exists = False
-            pk_tuple = self.build_pk_tuple(**kwargs)
-            if pk_tuple in self.instance_map:
-                object_exists = True
-            else:
-                query_options = ExtendableObject()
-                query_options.entity = type(self).__name__
-                query_options.condition = {}
-                for key in kwargs:
-                    if key in self.primary_keys:
-                        query_options.condition[key] = kwargs[key]
-                data = engine.get_object(query_options)
-                object_exists = data is not None
-            if object_exists:
+            query_options = ExtendableObject()
+            query_options.entity = type(self).__name__
+            query_options.condition = {}
+            for key in kwargs:
+                if key in self.primary_keys:
+                    query_options.condition[key] = kwargs[key]
+            data = engine.get_object(query_options)
+            if data is not None:
                 raise DatabaseException("Object exists")
             self.commit_method = "Insert"
             for key, value in kwargs.items():
-                ExtendableObject.__setattr__(self, key, value)
+                super().__setattr__(key, value)
             engine.altered_objects.append(self)
             self.last_valid_state = None
             self.has_changes = True
@@ -70,7 +65,7 @@ class MySQLBase(ExtendableObject, metaclass=MySQLMeta):
         self.is_valid = True
 
     def __setattr__(self, key, value):
-        if key in self._primary_keys:
+        if key in self.primary_keys:
             raise DatabaseException("Altering %s, which is id of object of %s class" % (key, self.__name__))
         if key in self.fields:
             if key not in self.fields_to_commit:
@@ -78,16 +73,7 @@ class MySQLBase(ExtendableObject, metaclass=MySQLMeta):
             if self not in self.engine.altered_objects:
                 self.engine.altered_objects.append(self)
             self.has_changes = True
-        ExtendableObject.__setattr__(self, key, value)
-
-    def __getattr__(self, item):
-        self.validate()
-        ExtendableObject.__getattr__(self, item)
-
-    def __delattr__(self, item):
-        if item in self.fields:
-            raise DatabaseException("It's impossible to remove field from MySQL object")
-        ExtendableObject.__delattr__(self, item)
+        super().__setattr__(key, value)
 
     def validate(self):
         if self.is_valid:
@@ -95,17 +81,18 @@ class MySQLBase(ExtendableObject, metaclass=MySQLMeta):
         if self.last_valid_state is None:
             raise DatabaseException("Object is in invalid state and it's impossible to validate it automatically")
         for key, value in self.last_valid_state.items:
-            ExtendableObject.__setattr__(self, key, value)
+            super().__setattr__(key, value)
         self.is_valid = True
 
     def keep_state_as_valid(self):
         self.is_valid = True
+        self.last_valid_state = {}
         for field in self.fields:
             self.last_valid_state[field] = getattr(self, field)
 
     def get_condition(self):
         condition = {}
-        for key in self._primary_keys:
+        for key in self.primary_keys:
             condition[key] = getattr(self, key)
         return condition
 
@@ -117,13 +104,14 @@ class MySQLBase(ExtendableObject, metaclass=MySQLMeta):
             cursor = connection.cursor()
         query_options = ExtendableObject()
         query_options.method = self.commit_method
+        query_options.entity = type(self).__name__
         query_options.data = {}
         if self.commit_method == "Insert":
             for field in self.fields:
-                query_options.data[field] = ExtendableObject.__getattr__(self, field)
+                query_options.data[field] = getattr(self, field)
         else:
             for field in self.fields_to_commit:
-                query_options.data[field] = ExtendableObject.__getattr__(self, field)
+                query_options.data[field] = getattr(self, field)
         try:
             self.engine.do_query(query_options, cursor)
             if connection is not None:
@@ -137,7 +125,8 @@ class MySQLBase(ExtendableObject, metaclass=MySQLMeta):
             raise
         finally:
             cursor.close()
-            connection.close()
+            if connection is not None:
+                connection.close()
 
     def rollback(self):
         self.validate()
