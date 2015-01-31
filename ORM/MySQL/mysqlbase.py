@@ -43,7 +43,6 @@ class MySQLBase(metaclass=MySQLMeta):
                 self.commit_method = "Update"
                 for key, value in data.items():
                     super().__setattr__(key, value)
-                self.keep_state_as_valid()
 
         if is_new_object:
             query_options = ExtendableObject()
@@ -62,7 +61,7 @@ class MySQLBase(metaclass=MySQLMeta):
             self.last_valid_state = None
             self.has_changes = True
 
-        self.is_valid = True
+        self.keep_state_as_valid()
 
     def __setattr__(self, key, value):
         if key in self.primary_keys:
@@ -75,17 +74,7 @@ class MySQLBase(metaclass=MySQLMeta):
             self.has_changes = True
         super().__setattr__(key, value)
 
-    def validate(self):
-        if self.is_valid:
-            return
-        if self.last_valid_state is None:
-            raise DatabaseException("Object is in invalid state and it's impossible to validate it automatically")
-        for key, value in self.last_valid_state.items:
-            super().__setattr__(key, value)
-        self.is_valid = True
-
     def keep_state_as_valid(self):
-        self.is_valid = True
         self.last_valid_state = {}
         for field in self.fields:
             self.last_valid_state[field] = getattr(self, field)
@@ -122,7 +111,6 @@ class MySQLBase(metaclass=MySQLMeta):
         except:
             if connection is not None:
                 connection.rollback()
-            self.is_valid = False
             raise
         finally:
             cursor.close()
@@ -130,4 +118,5 @@ class MySQLBase(metaclass=MySQLMeta):
                 connection.close()
 
     def rollback(self):
-        self.validate()
+        for key, value in self.last_valid_state.items:
+            super().__setattr__(key, value)
