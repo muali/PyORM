@@ -106,7 +106,7 @@ class TestMySQLEngine(unittest.TestCase):
         self.assertRaises(TypeError, ORM.complexidtest, 1, 2)
 
     def test_insertion(self):
-        new_city = ORM.city(ID=11, name="Saint-Petersburg", population=None)
+        ORM.city(ID=11, name="Saint-Petersburg", population=None)
         self.db.commit()
         connection = mysql.connector.connect(user=self.username, password=self.password, database=self.db_name)
         cursor = connection.cursor(dictionary=True)
@@ -116,7 +116,7 @@ class TestMySQLEngine(unittest.TestCase):
         self.assertEqual(new_city_from_db["population"], None)
         cursor.close()
         connection.close()
-        new_city2 = ORM.city(ID=12, name="a"*50, population=None)
+        ORM.city(ID=12, name="a"*50, population=None)
         self.assertRaises(Exception, self.db.commit)
 
     def test_update(self):

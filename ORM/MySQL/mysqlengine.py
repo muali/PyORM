@@ -6,6 +6,7 @@ import mysql.connector
 import ORM
 from ORM.MySQL.mysqlbase import *
 
+
 def build_condition(condition_options):
     condition = "where "
     is_first = True
@@ -101,6 +102,11 @@ class MySQLEngine(object):
             obj.keep_state_as_valid()
             obj.has_changes = False
         self.altered_objects = []
+
+    def rollback(self):
+        for obj in self.altered_objects:
+            if obj.has_changes:
+                obj.rollback()
 
     @staticmethod
     def do_query(query_options, cursor):
