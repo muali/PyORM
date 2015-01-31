@@ -34,6 +34,9 @@ class MySQLEngine(object):
         self.connection_pool = mysql.connector.pooling.MySQLConnectionPool(**connection_options)
         self.load_classes()
 
+    def get_connection(self):
+        return self.connection_pool.get_connection()
+
     def load_classes(self):
         def init_decorator(init):
             def decorated(obj, **kwargs):
@@ -121,7 +124,6 @@ class MySQLEngine(object):
             query += "update %s\n" % query_options.entity
             query += "set "
             is_first = True
-            data = {}
             for key in query_options.data:
                 if is_first:
                     is_first = False
@@ -129,4 +131,6 @@ class MySQLEngine(object):
                     query += ','
                 query += "%s = %%(%s)s" % (key, key)
             query += '\n' + build_condition(query_options.condition)
-            cursor.execute(query, data, query_options.condition)
+            data = query_options.data
+            data.update(query_options.condition)
+            cursor.execute(query, data)

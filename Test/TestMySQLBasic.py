@@ -107,7 +107,6 @@ class TestMySQLEngine(unittest.TestCase):
 
     def test_insertion(self):
         new_city = ORM.city(ID=11, name="Saint-Petersburg", population=None)
-        new_city.name = "Saint-Petersburg"
         self.db.commit()
         connection = mysql.connector.connect(user=self.username, password=self.password, database=self.db_name)
         cursor = connection.cursor(dictionary=True)
@@ -119,6 +118,18 @@ class TestMySQLEngine(unittest.TestCase):
         connection.close()
         new_city2 = ORM.city(ID=12, name="a"*50, population=None)
         self.assertRaises(Exception, self.db.commit)
+
+    def test_update(self):
+        city1 = ORM.city(ID=1)
+        city1.name = "X"
+        city1.commit()
+        connection = mysql.connector.connect(user=self.username, password=self.password, database=self.db_name)
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM city WHERE ID=1")
+        city1_from_db = cursor.fetchone()
+        self.assertEqual(city1_from_db["name"], "X")
+        cursor.close()
+        connection.close()
 
     def tearDown(self):
         MySQLMeta.instance_map = {}

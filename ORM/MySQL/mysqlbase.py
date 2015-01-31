@@ -112,6 +112,7 @@ class MySQLBase(metaclass=MySQLMeta):
         else:
             for field in self.fields_to_commit:
                 query_options.data[field] = getattr(self, field)
+            query_options.condition = self.get_condition()
         try:
             self.engine.do_query(query_options, cursor)
             if connection is not None:
