@@ -14,7 +14,7 @@ class MongoBase(object, metaclass=MongoDBMeta):
         if "_id" not in kwargs:
             raise DatabaseException("_id field not specified")
         data = engine.get_object(type(self).__name__, kwargs["_id"])
-        if data is not None and len(kwargs) > 1:
+        if data and len(kwargs) > 1:
             raise DatabaseException("Object exists")
         if data is None:
             super().__setattr__("_mongo_dict", kwargs)

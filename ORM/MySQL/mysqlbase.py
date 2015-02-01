@@ -39,7 +39,7 @@ class MySQLBase(metaclass=MySQLMeta):
             data = engine.get_object(query_options)
             if data is None and not is_new_object:
                 raise DatabaseException("Object didn't exists")
-            if data is not None:
+            if data:
                 is_new_object = False
                 self.commit_method = "Update"
                 for key, value in data.items():
@@ -53,7 +53,7 @@ class MySQLBase(metaclass=MySQLMeta):
                 if key in self.primary_keys:
                     query_options.condition[key] = kwargs[key]
             data = engine.get_object(query_options)
-            if data is not None:
+            if data:
                 raise DatabaseException("Object exists")
             self.commit_method = "Insert"
             for key, value in kwargs.items():
@@ -101,16 +101,20 @@ class MySQLBase(metaclass=MySQLMeta):
         self.engine.do_query(query_options, cursor)
 
     def commit(self):
-        with closing(self.engine.get_connection()) as connection, closing(connection.cursor()) as cursor:
-            connection.start_transaction()
-            try:
-                self.commit_with_rollback(cursor)
-                connection.commit()
-                self.keep_state_as_valid()
-                self.has_changes = False
-            except:
-                connection.rollback()
-                raise
+        connection = self.engine.get_connection()
+        cursor = connection.cursor()
+        connection.start_transaction()
+        try:
+            self.commit_with_rollback(cursor)
+            connection.commit()
+            self.keep_state_as_valid()
+            self.has_changes = False
+        except:
+            connection.rollback()
+            raise
+        finally:
+            cursor.close()
+            connection.close()
 
     def rollback(self):
         for key, value in self.last_valid_state.items:

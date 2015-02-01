@@ -71,19 +71,23 @@ class MySQLEngine(object):
             return result
 
     def commit(self):
-        with closing(self.get_connection()) as connection, closing(connection.cursor()) as cursor:
-            try:
-                connection.start_transaction()
-                for obj in self.altered_objects:
-                    if obj.has_changes:
-                        obj.commit_with_rollback(cursor)
-                connection.commit()
-            except:
-                connection.rollback()
-                for obj in self.altered_objects:
-                    if obj.has_changes:
-                        obj.is_valid = False
-                raise
+        connection = self.get_connection()
+        cursor = connection.cursor()
+        try:
+            connection.start_transaction()
+            for obj in self.altered_objects:
+                if obj.has_changes:
+                    obj.commit_with_rollback(cursor)
+            connection.commit()
+        except:
+            connection.rollback()
+            for obj in self.altered_objects:
+                if obj.has_changes:
+                    obj.is_valid = False
+            raise
+        finally:
+            cursor.close()
+            connection.close()
 
         for obj in self.altered_objects:
             obj.keep_state_as_valid()

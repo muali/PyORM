@@ -13,7 +13,7 @@ class MongoDBEngine(object):
     def __init__(self, database, name=None, password=None, **connection_options):
         self.client = MongoClient(**connection_options)
         self.db = self.client[database]
-        if name is not None and password is not None:
+        if name and password:
             self.db.authenticate(name, password)
         self.load_classes()
 
