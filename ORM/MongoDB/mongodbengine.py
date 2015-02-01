@@ -17,9 +17,6 @@ class MongoDBEngine(object):
             self.db.authenticate(name, password)
         self.load_classes()
 
-    def get_connection(self):
-        return self.connection_pool.get_connection()
-
     def load_classes(self):
         def init_decorator(init):
             def decorated(obj, **kwargs):

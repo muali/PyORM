@@ -5,6 +5,7 @@ __author__ = 'Moskvitin Maxim'
 from ORM.MySQL.mysqlmeta import *
 from ORM.utils.extendableobject import *
 from ORM.exceptions import *
+from contextlib import closing
 
 
 class MySQLBase(metaclass=MySQLMeta):
@@ -85,12 +86,7 @@ class MySQLBase(metaclass=MySQLMeta):
             condition[key] = getattr(self, key)
         return condition
 
-    def commit(self, cursor=None):
-        connection = None
-        if cursor is None:
-            connection = self.engine.get_connection()
-            connection.start_transaction()
-            cursor = connection.cursor()
+    def commit_with_rollback(self, cursor):
         query_options = ExtendableObject()
         query_options.method = self.commit_method
         query_options.entity = type(self).__name__
@@ -102,20 +98,19 @@ class MySQLBase(metaclass=MySQLMeta):
             for field in self.fields_to_commit:
                 query_options.data[field] = getattr(self, field)
             query_options.condition = self.get_condition()
-        try:
-            self.engine.do_query(query_options, cursor)
-            if connection is not None:
+        self.engine.do_query(query_options, cursor)
+
+    def commit(self):
+        with closing(self.engine.get_connection()) as connection, closing(connection.cursor()) as cursor:
+            connection.start_transaction()
+            try:
+                self.commit_with_rollback(cursor)
                 connection.commit()
                 self.keep_state_as_valid()
                 self.has_changes = False
-        except:
-            if connection is not None:
+            except:
                 connection.rollback()
-            raise
-        finally:
-            cursor.close()
-            if connection is not None:
-                connection.close()
+                raise
 
     def rollback(self):
         for key, value in self.last_valid_state.items:

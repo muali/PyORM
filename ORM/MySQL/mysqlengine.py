@@ -5,18 +5,10 @@ __author__ = 'Moskvitin Maxim'
 import mysql.connector
 import ORM
 from ORM.MySQL.mysqlbase import *
-
+from contextlib import closing
 
 def build_condition(condition_options):
-    condition = "where "
-    is_first = True
-    for key in condition_options:
-        if is_first:
-            is_first = False
-        else:
-            condition += " and "
-        condition += "%s = %%(%s)s" % (key, key)
-    return condition
+    return "where " + " and ".join(["%s = %%(%s)s" % (key, key) for key in condition_options])
 
 
 class Table:
@@ -50,18 +42,17 @@ class MySQLEngine(object):
             setattr(ORM, new_class.__name__, new_class)
 
     def get_db_schema(self):
-        connection = self.connection_pool.get_connection()
-        cursor = connection.cursor()
-        cursor.execute("show tables")
         tables = []
-        for (name,) in cursor:
-            tables.append(Table(name))
-        cursor.close()
-        cursor = connection.cursor(dictionary=True)
-        for table in tables:
-            cursor.execute("desc %s" % table.name)
-            for column in cursor:
-                table.add_column(column)
+        with closing(self.get_connection()) as connection:
+            with closing(connection.cursor()) as cursor:
+                cursor.execute("show tables")
+                for (name,) in cursor:
+                    tables.append(Table(name))
+            with closing(connection.cursor(dictionary=True)) as cursor:
+                for table in tables:
+                    cursor.execute("desc %s" % table.name)
+                    for column in cursor:
+                        table.add_column(column)
         return tables
 
     @staticmethod
@@ -72,32 +63,28 @@ class MySQLEngine(object):
         })
 
     def get_object(self, query_options):
-        connection = self.connection_pool.get_connection()
-        query = "select * from %s\n" % query_options.entity
-        query += build_condition(query_options.condition)
-        cursor = connection.cursor(dictionary=True)
-        cursor.execute(query, query_options.condition)
-        result = cursor.fetchone()
-        cursor.close()
-        connection.close()
-        return result
+        with closing(self.get_connection()) as connection, closing(connection.cursor(dictionary=True)) as cursor:
+            query = "select * from %s\n" % query_options.entity
+            query += build_condition(query_options.condition)
+            cursor.execute(query, query_options.condition)
+            result = cursor.fetchone()
+            return result
 
     def commit(self):
-        connection = self.connection_pool.get_connection()
-        try:
-            connection.start_transaction()
-            for obj in self.altered_objects:
-                if obj.has_changes:
-                    obj.commit(connection.cursor())
-            connection.commit()
-        except:
-            connection.rollback()
-            for obj in self.altered_objects:
-                if obj.has_changes:
-                    obj.is_valid = False
-            raise
-        finally:
-            connection.close()
+        with closing(self.get_connection()) as connection, closing(connection.cursor()) as cursor:
+            try:
+                connection.start_transaction()
+                for obj in self.altered_objects:
+                    if obj.has_changes:
+                        obj.commit_with_rollback(cursor)
+                connection.commit()
+            except:
+                connection.rollback()
+                for obj in self.altered_objects:
+                    if obj.has_changes:
+                        obj.is_valid = False
+                raise
+
         for obj in self.altered_objects:
             obj.keep_state_as_valid()
             obj.has_changes = False
@@ -109,34 +96,26 @@ class MySQLEngine(object):
                 obj.rollback()
 
     @staticmethod
+    def do_update(query_options, cursor):
+        query = "update %s\n" % query_options.entity
+        query += "set "
+        query += ",".join(["%s = %%(%s)s" % (key, key) for key in query_options.data.keys()])
+        query += '\n' + build_condition(query_options.condition)
+        data = query_options.data
+        data.update(query_options.condition)
+        cursor.execute(query, data)
+
+    @staticmethod
+    def do_insert(query_options, cursor):
+        query = "insert into %s\n" % query_options.entity
+        query += "(" + ",".join([key for key in query_options.data.keys()]) + ")\n"
+        query += "values (" + ",".join(["%%(%s)s" % key for key in query_options.data.keys()]) + ")"
+        cursor.execute(query, query_options.data)
+
+    @staticmethod
     def do_query(query_options, cursor):
-        query = ""
-        if query_options.method == "Insert":
-            query += "insert into %s\n" % query_options.entity
-            fields = "("
-            values = "values ("
-            is_first = True
-            for key in query_options.data:
-                if is_first:
-                    is_first = False
-                else:
-                    fields += ','
-                    values += ','
-                fields += key
-                values += "%%(%s)s" % key
-            query += fields + ")\n" + values + ')'
-            cursor.execute(query, query_options.data)
-        else:
-            query += "update %s\n" % query_options.entity
-            query += "set "
-            is_first = True
-            for key in query_options.data:
-                if is_first:
-                    is_first = False
-                else:
-                    query += ','
-                query += "%s = %%(%s)s" % (key, key)
-            query += '\n' + build_condition(query_options.condition)
-            data = query_options.data
-            data.update(query_options.condition)
-            cursor.execute(query, data)
+        query_to_method = {
+            "Update": MySQLEngine.do_update,
+            "Insert": MySQLEngine.do_insert
+        }
+        query_to_method[query_options.method](query_options, cursor)
